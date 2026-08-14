@@ -1,0 +1,101 @@
+---
+title: "Phillips Curve"
+author: "Thomas Bobitz"
+date: "2026-02-15"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+The origins of the Phillips curve come from AWH Phillips who documented a negative relationship between nominal wage inflation and the unemployment rate. The Phillips Curve is sound in logic, saying that if less people are employed (decrease in the unemployment rate), wage inflation will rise because businesses will have to pay more for the new workers. However, the Phillips curve has been a hotly debated topic for the past decades because the trend hasn’t held as expected. But many more modern models focus on general price inflation rather than wage inflation and a measure of the output gap rather than unemployment to better accommodate the New Keynesian model, leading to the more commonly seen model which is the New Keynesian Phillips curve. I will be exploring the original Phillips curve and its trends. 
+
+Data Used:
+For the nominal wage inflation, I used the Employed full time: Median usual weekly nominal earnings data set as found on FRED and used data from 1979/01/01 to 2025/07/01. Attached is the link https://fred.stlouisfed.org/series/LEU0252881500Q 
+For the unemployment rate, I used the Unemployment Rate (Unrate) from the FRED over the same time period. Attached is the link https://fred.stlouisfed.org/series/UNRATE 
+For the inflation rate, I took the difference in wage from the previous year and divided that by the wage and then multiplied by 100. 
+
+
+Loading in data and packages 
+```{r}
+setwd("C:/Econ/Econ 203")
+library("readxl")
+library("ggplot2")
+wage_data <- read.csv("LEU0252881500Q.csv")
+unrate_data <- read.csv("UNRATE.csv")
+phillips <- read_xlsx("phillips_data.xlsx")
+```
+
+Forming the Phillips Curve
+```{r}
+
+ggplot(data = phillips, aes(x = unrate, y = wage_inflation)) +
+  geom_point()
+```
+The dot plot does not show any clear trend in the data, being fairly randomly scrambled. However, if segmenting from unemployment rates of 3 to 6 there seems there might be a negative trend, which would be consistent with the Phillips curve, so I will segment those data points, and see if there is a clearer relationship. 
+
+```{r}
+low_unep <- phillips[phillips$unrate <= 6, ]
+ggplot(data = low_unep, aes(x = unrate, y = wage_inflation)) +
+  geom_point()
+summary(lm(wage_inflation ~ unrate, low_unep))
+cor(low_unep$wage_inflation, low_unep$unrate, use = "complete.obs")
+```
+Visually, it still seems somewhat weak, but more so consistent with the Phillips Curve. As for numerically, there does seem to be a fairly strong linearly negative correlation, at -0.616 and a -1.036 slope coefficient with a statistically significant p-value. However, the Phillips Curves that I have seen do not follow a linear relationship, rather one convex to the origin. So, I will next run a regression and create a graph using ln(unrate). 
+
+```{r}
+ggplot(data = low_unep, aes(x = log(unrate), y = wage_inflation)) +
+  geom_point()
+summary(lm(wage_inflation ~ log(unrate), low_unep))
+cor(low_unep$wage_inflation, log(low_unep$unrate), use = "complete.obs")
+
+```
+This seems to have only slightly improved the model's function, bring the correlation to -.6223, as well as increasing the R^2 from .379 to .3873. 
+
+Another common critique so to speak of the Phillips Curve is that recent data has shown a flattening of the curve, so that is what I will be exploring next. 
+I will bisect the data into pre-2000s (denoted in the code as pre_phillips) and post-2000s (denoted in the code as post_phillips) to explore the more recent trends. For this, I will be adding back into consideration higher rates of unemployment. This comes out to 84 entries for pre, and just over 100 for post. 
+
+```{r}
+pre_phillips <- phillips[1:84, ]
+post_phillips <- phillips[85:187, ]
+ggplot(data = pre_phillips, aes(x = unrate, y = wage_inflation)) +
+  geom_point() +
+  labs(title = "Phillips Curve Pre 2000")
+ggplot(data = post_phillips, aes(x = unrate, y = wage_inflation)) +
+  geom_point() +
+  labs(title = "Phillips Curve Post 2000")
+```
+Very interesting and honestly unexpected results from my viewpoint. The Phillips Curve pre 2000 shows almost no correlation at all, it seems like a fairly random scatter of data points, and if anything, just looking visually it may even have a positive relationship. But the Phillips Curve post 2000 has a very clear downward curving slope, convex to the origin as stated in the original theory. I would however like to discuss now the two very clear outlier points. The points (14.8, 9.38) and (10.2, 7.55) were data points taken April 1st, 2020 and July 1st, 2020, which were at the peak of COVID 19. Understanding the context behind why these two points and the economic uncertainty brought about by COVID during that time, I feel as though it is fair to omit them from consideration for this exploration. Now that we have the visuals, I will now move onto removing the two out standing COVID points and look at both pre and post numerically. 
+
+```{r}
+post_phillips_clean <- post_phillips[post_phillips$wage_inflation < 7.5, ]
+summary(lm(wage_inflation ~ unrate, pre_phillips))
+cor(pre_phillips$wage_inflation, pre_phillips$unrate, use = "complete.obs")
+
+summary(lm(wage_inflation ~ unrate, post_phillips_clean))
+cor(post_phillips_clean$wage_inflation, post_phillips_clean$unrate)
+```
+So, as predicted visually, the correlation for the pre-2000 subsection ended up being weak and positive, with a positive slope, and R^2 of only about .124. While the post-2000 (cleaned) has a fairly strong negative correlation at -.617, and an R^2 of .3812. Since however again that it seems to be a non-linear relationship, I will take the natural log of the unemployment rate to try and find a stronger linear relationship. 
+
+```{r}
+summary(lm(wage_inflation ~ log(unrate), post_phillips_clean))
+cor(post_phillips_clean$wage_inflation, log(post_phillips_clean$unrate))
+ggplot(data = post_phillips_clean, aes(x = log(unrate), y = wage_inflation)) +
+  geom_point()
+
+```
+This has a slightly better correlation than before, but not as much as I would have expected. That may come from it not being a true natural log relationship, as indicated by the graph, which still seems a little curved. I will now instead attempt a non-linear regression of the post-2000. I will use a exponential curve to try and model it. 
+
+```{r}
+summary(nls(wage_inflation ~ a * exp(b * unrate), data = post_phillips_clean, start = list(a = -1, b= 0.1)))
+ggplot(data = post_phillips_clean, aes(x = unrate, y = wage_inflation)) +
+  geom_point() +
+  geom_smooth(method = "nls", formula = y ~ a*exp(b*x), method.args = list(start = list(a=-1, b=.01)), se = FALSE) 
+```
+Visually, the line of best fit is not as steep as I would have expected/ what I have seen from other Phillips Curves. This is consistent with the analysis of economists, where more recently the Phillips curve has flattened out. 
+
+
